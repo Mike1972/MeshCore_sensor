@@ -1,3 +1,6 @@
+// Abgeleitet vom Simple Sensor Node, erweitert um:
+// - SHT31 Luftfeuchte/Temperatur Sensor
+
 #include "SensorMesh.h"
 
 #ifdef DISPLAY_CLASS
