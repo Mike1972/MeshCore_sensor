@@ -2,34 +2,36 @@
 
 #ifdef DISPLAY_CLASS
   #include "UITask.h"
+  #include "helpers/ui/MomentaryButton.h"
   static UITask ui_task(display);
 #endif
 
-// ── Sensor-Bibliotheken ───────────────────────────────────────────────
 #include <Wire.h>
 #include <Adafruit_SHT31.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
 // ── Pin-Definitionen T114 ─────────────────────────────────────────────
-#define PIN_DS18B20   13   // 1-Wire DQ
-#define PIN_SOIL_ADC   2   // AIN0 — Bodenfeuchte
-#define PIN_SOIL_VCC  25   // schaltbare Sensor-Versorgung
-// Akku-ADC ist intern via getVoltage(TELEM_CHANNEL_SELF) verfügbar
+#define PIN_DS18B20     13
+#define PIN_SOIL_ADC     2
+#define PIN_SOIL_VCC    25
+#define PIN_USER_BTN    42   // P1.10 — User-Taste T114
+
+// ── Display-Timeout nach Boot ─────────────────────────────────────────
+#define DISPLAY_ON_BOOT_MS  3000UL   // 3 Sekunden sichtbar, dann aus
 
 Adafruit_SHT31    sht31;
 OneWire           ow(PIN_DS18B20);
 DallasTemperature ds18(&ow);
 
-// ── Hilfsfunktionen ───────────────────────────────────────────────────
-static int readSoilMoisture() {
-  pinMode(PIN_SOIL_VCC, OUTPUT);
-  digitalWrite(PIN_SOIL_VCC, HIGH);
-  delay(500);
-  int val = analogRead(PIN_SOIL_ADC);
-  digitalWrite(PIN_SOIL_VCC, LOW);
-  return val;
-}
+// ── Display-Zustand ───────────────────────────────────────────────────
+static bool     displayOn       = true;
+static uint32_t displayOnSince  = 0;
+
+// ── Tasten-Entprellung ────────────────────────────────────────────────
+static bool     lastBtnState    = HIGH;
+static uint32_t lastDebounceMs  = 0;
+#define DEBOUNCE_MS 50UL
 
 // ════════════════════════════════════════════════════════════════════
 class MyMesh : public SensorMesh {
@@ -41,33 +43,28 @@ public:
   { }
 
 protected:
-  Trigger low_batt, critical_batt;
+  Trigger        low_batt, critical_batt;
   TimeSeriesData battery_data;
 
   void onSensorDataRead() override {
-    float battV = getVoltage(TELEM_CHANNEL_SELF);
+    float battV    = getVoltage(TELEM_CHANNEL_SELF);
+    float airTemp  = sht31.readTemperature();
+    float airHum   = sht31.readHumidity();
 
-    // ── SHT31: Lufttemperatur & Luftfeuchtigkeit ──────────────────
-    float airTemp = sht31.readTemperature();
-    float airHum  = sht31.readHumidity();
     if (isnan(airTemp)) airTemp = -99.0f;
     if (isnan(airHum))  airHum  =   0.0f;
 
-    // ── DS18B20: Bodentemperatur ──────────────────────────────────
     ds18.requestTemperatures();
     delay(750);
     float soilTemp = ds18.getTempCByIndex(0);
     if (soilTemp < -55.0f) soilTemp = -99.0f;
 
-    // ── Kapazitive Bodenfeuchte ───────────────────────────────────
     int soilRaw = readSoilMoisture();
 
-    // ── Debug-Ausgabe ─────────────────────────────────────────────
     Serial.printf("[Garten] Luft: %.1f°C  %.1f%%  Boden: %.1f°C"
                   "  Feuchte: %d  Akku: %.2fV\n",
                   airTemp, airHum, soilTemp, soilRaw, battV);
 
-    // ── Akku-Alarme (aus Original übernommen) ─────────────────────
     battery_data.recordData(getRTCClock(), battV);
     alertIf(battV < 3.4f, critical_batt, HIGH_PRI_ALERT, "Battery is critical!");
     alertIf(battV < 3.6f, low_batt,      LOW_PRI_ALERT,  "Battery is low");
@@ -82,7 +79,17 @@ protected:
 
   bool handleCustomCommand(uint32_t sender_timestamp,
                            char* command, char* reply) override {
-    return false;  // keine Custom-Commands
+    return false;
+  }
+
+private:
+  static int readSoilMoisture() {
+    pinMode(PIN_SOIL_VCC, OUTPUT);
+    digitalWrite(PIN_SOIL_VCC, HIGH);
+    delay(500);
+    int val = analogRead(PIN_SOIL_ADC);
+    digitalWrite(PIN_SOIL_VCC, LOW);
+    return val;
   }
 };
 
@@ -93,32 +100,75 @@ MyMesh the_mesh(board, radio_driver, *new ArduinoMillis(),
                 fast_rng, rtc_clock, tables);
 
 void halt() { while (1); }
-
 static char command[160];
 
+// ════════════════════════════════════════════════════════════════════
+// Display ein/ausschalten
+// ════════════════════════════════════════════════════════════════════
+static void setDisplay(bool on) {
+#ifdef DISPLAY_CLASS
+  if (on) {
+    display.begin();
+    displayOn = true;
+  } else {
+    display.clear();
+    display.displayOff();   // ST7789: Backlight + Panel aus
+    displayOn = false;
+  }
+#endif
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Tasten-Polling mit Entprellung — in loop() aufrufen
+// ════════════════════════════════════════════════════════════════════
+static void handleButton() {
+  bool reading = digitalRead(PIN_USER_BTN);
+  uint32_t now = millis();
+
+  if (reading != lastBtnState) {
+    lastDebounceMs = now;
+  }
+
+  if ((now - lastDebounceMs) > DEBOUNCE_MS) {
+    // Fallende Flanke = Taste gedrückt (Pull-up, LOW = gedrückt)
+    if (reading == LOW && lastBtnState == HIGH) {
+      setDisplay(!displayOn);
+      Serial.printf("[Button] Display %s\n", displayOn ? "EIN" : "AUS");
+    }
+  }
+  lastBtnState = reading;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SETUP
+// ════════════════════════════════════════════════════════════════════
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  board.begin();
+  // User-Taste als Input mit Pull-up
+  pinMode(PIN_USER_BTN, INPUT_PULLUP);
 
-  // ── Sensoren initialisieren ───────────────────────────────────────
+  // Sensoren
   Wire.begin();
   if (!sht31.begin(0x44)) {
     Serial.println("FEHLER: SHT31 nicht gefunden!");
   }
   ds18.begin();
 
+  board.begin();
+
 #ifdef DISPLAY_CLASS
   if (display.begin()) {
     display.startFrame();
     display.print("Garten Node...");
     display.endFrame();
+    displayOnSince = millis();
   }
+  // UI-Task starten (zeigt Sensor-Seiten)
 #endif
 
   if (!radio_init()) { halt(); }
-
   fast_rng.begin(radio_get_rng_seed());
 
   FILESYSTEM* fs;
@@ -166,7 +216,24 @@ void setup() {
 #endif
 }
 
+// ════════════════════════════════════════════════════════════════════
+// LOOP
+// ════════════════════════════════════════════════════════════════════
 void loop() {
+  // ── Display nach 3 s automatisch ausschalten ──────────────────────
+#ifdef DISPLAY_CLASS
+  if (displayOn && displayOnSince > 0 &&
+      (millis() - displayOnSince) >= DISPLAY_ON_BOOT_MS) {
+    setDisplay(false);
+    displayOnSince = 0;   // einmalig, nicht wiederholen
+    Serial.println("[Display] Automatisch ausgeschaltet nach 3s");
+  }
+#endif
+
+  // ── Tasten-Handling ───────────────────────────────────────────────
+  handleButton();
+
+  // ── Serial CLI ────────────────────────────────────────────────────
   int len = strlen(command);
   while (Serial.available() && len < sizeof(command)-1) {
     char c = Serial.read();

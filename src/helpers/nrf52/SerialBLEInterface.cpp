@@ -12,7 +12,7 @@
 #define BLE_MIN_CONN_INTERVAL      12     // 15ms
 #define BLE_MAX_CONN_INTERVAL      24     // 30ms
 #define BLE_SLAVE_LATENCY          4
-#define BLE_CONN_SUP_TIMEOUT       200    // 2000ms
+#define BLE_CONN_SUP_TIMEOUT       500    // 5000ms
 
 // Advertising parameters
 #define BLE_ADV_INTERVAL_MIN       32     // 20ms (units: 0.625ms)
@@ -51,24 +51,10 @@ void SerialBLEInterface::onSecured(uint16_t connection_handle) {
       instance->_isDeviceConnected = true;
       
       // Connection interval units: 1.25ms, supervision timeout units: 10ms
-      // Apple: "The product will not read or use the parameters in the Peripheral Preferred Connection Parameters characteristic."
-      // So we explicitly set it here to make Android & Apple match
-      ble_gap_conn_params_t conn_params;
-      conn_params.min_conn_interval = BLE_MIN_CONN_INTERVAL;
-      conn_params.max_conn_interval = BLE_MAX_CONN_INTERVAL;
-      conn_params.slave_latency = BLE_SLAVE_LATENCY;
-      conn_params.conn_sup_timeout = BLE_CONN_SUP_TIMEOUT;
-      
-      uint32_t err_code = sd_ble_gap_conn_param_update(connection_handle, &conn_params);
-      if (err_code == NRF_SUCCESS) {
-        BLE_DEBUG_PRINTLN("Connection parameter update requested: %u-%ums interval, latency=%u, %ums timeout",
-                         conn_params.min_conn_interval * 5 / 4,  // convert to ms (1.25ms units)
-                         conn_params.max_conn_interval * 5 / 4,
-                         conn_params.slave_latency,
-                         conn_params.conn_sup_timeout * 10);  // convert to ms (10ms units)
-      } else {
-        BLE_DEBUG_PRINTLN("Failed to request connection parameter update: %lu", err_code);
-      }
+      // We already set preferred connection parameters via PPCP at startup.
+      // Avoid forcing an explicit connection parameter update here, since some central
+      // clients behave more reliably when the stack negotiates parameters naturally.
+      BLE_DEBUG_PRINTLN("SerialBLEInterface: secured, device connected handle=0x%04X", connection_handle);
     } else {
       BLE_DEBUG_PRINTLN("onSecured: ignoring stale/duplicate callback");
     }
