@@ -102,26 +102,22 @@ void ST7789Display::setColor(Color c) {
       _color = ST77XX_BLACK;
       display.setColor(OLEDDISPLAY_COLOR::BLACK);
       break;
-#if 0
-    case DisplayDriver::LIGHT : 
-      _color = ST77XX_WHITE;
-      break;
-    case DisplayDriver::RED : 
+    case DisplayDriver::RED :
       _color = ST77XX_RED;
       break;
-    case DisplayDriver::GREEN : 
+    case DisplayDriver::GREEN :
       _color = ST77XX_GREEN;
       break;
-    case DisplayDriver::BLUE : 
+    case DisplayDriver::BLUE :
       _color = ST77XX_BLUE;
       break;
-    case DisplayDriver::YELLOW : 
+    case DisplayDriver::YELLOW :
       _color = ST77XX_YELLOW;
       break;
-    case DisplayDriver::ORANGE : 
+    case DisplayDriver::ORANGE :
       _color = ST77XX_ORANGE;
       break;
-#endif
+    case DisplayDriver::LIGHT :
     default:
       _color = ST77XX_WHITE;
       display.setColor(OLEDDISPLAY_COLOR::WHITE);

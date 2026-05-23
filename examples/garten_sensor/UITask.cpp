@@ -8,6 +8,23 @@
 
 #define AUTO_OFF_MILLIS      20000  // 20 seconds
 #define BOOT_SCREEN_MILLIS   4000   // 4 seconds
+#define LONG_PRESS_MILLIS    1500   // Hold USR for 1.5s to toggle sleep mode
+
+extern bool sleepEnabled;
+extern void toggleSleep();
+
+#ifndef SLEEP_AFTER_SEND_SECS
+#define SLEEP_AFTER_SEND_SECS 600
+#endif
+
+extern bool displayOn;
+extern bool displayBootAutoOff;
+extern uint32_t sendCount;
+extern float lastBattV;
+extern float lastAirTemp;
+extern float lastAirHum;
+extern float lastSoilTemp;
+extern int lastSoilRaw;
 
 // 'meshcore', 128x13px
 static const uint8_t meshcore_logo [] PROGMEM = {
@@ -65,11 +82,20 @@ void UITask::renderCurrScreen() {
     _display->setCursor((_display->width() - typeWidth) / 2, 35);
     _display->print(node_type);
   } else {  // home screen
-    // node name
+    // node name (top left)
     _display->setCursor(0, 0);
     _display->setTextSize(1);
     _display->setColor(DisplayDriver::GREEN);
     _display->print(_node_prefs->node_name);
+
+    // Sleep status (top right): GREEN = sleep aktiv (Energiesparen), RED = immer wach
+    {
+      const char* lbl = "SLP";
+      uint16_t w = _display->getTextWidth(lbl);
+      _display->setColor(sleepEnabled ? DisplayDriver::GREEN : DisplayDriver::RED);
+      _display->setCursor(_display->width() - w, 0);
+      _display->print(lbl);
+    }
 
     // freq / sf
     _display->setCursor(0, 20);
@@ -81,7 +107,41 @@ void UITask::renderCurrScreen() {
     _display->setCursor(0, 30);
     sprintf(tmp, "BW: %03.2f CR: %d", _node_prefs->bw, _node_prefs->cr);
     _display->print(tmp);
+
+    // sensor data
+    _display->setCursor(0, 44);
+    _display->setColor(DisplayDriver::LIGHT);
+    sprintf(tmp, "BATT: %.2fV", lastBattV);
+    _display->print(tmp);
+
+    _display->setCursor(0, 54);
+    if (isnan(lastAirTemp) || lastAirTemp < -90.0f) {
+      sprintf(tmp, "AIR:  N/A");
+    } else {
+      sprintf(tmp, "AIR:  %.1fC %.0f%%", lastAirTemp, lastAirHum);
+    }
+    _display->print(tmp);
+
+    _display->setCursor(0, 64);
+    if (lastSoilTemp < -90.0f) {
+      sprintf(tmp, "SOIL: N/A M=%d", lastSoilRaw);
+    } else {
+      sprintf(tmp, "SOIL: %.1fC M=%d", lastSoilTemp, lastSoilRaw);
+    }
+    _display->print(tmp);
+
+    _display->setCursor(0, 74);
+#if SLEEP_AFTER_SEND_SECS > 0
+    sprintf(tmp, "SENDS: %u SLEEP:%u", sendCount, (unsigned)SLEEP_AFTER_SEND_SECS);
+#else
+    sprintf(tmp, "SENDS: %u", sendCount);
+#endif
+    _display->print(tmp);
   }
+}
+
+void UITask::resetAutoOff() {
+  _auto_off = millis() + AUTO_OFF_MILLIS;
 }
 
 void UITask::loop() {
@@ -89,17 +149,27 @@ void UITask::loop() {
   if (millis() >= _next_read) {
     int btnState = digitalRead(PIN_USER_BTN);
     if (btnState != _prevBtnState) {
-      if (btnState == USER_BTN_PRESSED) {  // pressed?
-        if (_display->isOn()) {
-          // TODO: any action ?
-        } else {
-          _display->turnOn();
+      if (btnState == USER_BTN_PRESSED) {  // press detected
+        _btnDownAt = millis();
+        _longPressFired = false;
+        if (!_display->isOn()) {
+          _display->turnOn();   // wake display on any press
         }
-        _auto_off = millis() + AUTO_OFF_MILLIS;   // extend auto-off timer
+        _auto_off = millis() + AUTO_OFF_MILLIS;
+      } else {                            // release detected
+        _btnDownAt = 0;
       }
       _prevBtnState = btnState;
     }
-    _next_read = millis() + 200;  // 5 reads per second
+    // Hold-detection: fire once after LONG_PRESS_MILLIS while still pressed
+    if (_btnDownAt > 0 && !_longPressFired &&
+        (millis() - _btnDownAt) >= LONG_PRESS_MILLIS) {
+      _longPressFired = true;
+      toggleSleep();
+      _next_refresh = 0;                  // force redraw with new state
+      _auto_off = millis() + AUTO_OFF_MILLIS;
+    }
+    _next_read = millis() + 50;           // 20 reads per second for crisp long-press
   }
 #endif
 
@@ -108,7 +178,6 @@ void UITask::loop() {
       _display->startFrame();
       renderCurrScreen();
       _display->endFrame();
-
       _next_refresh = millis() + 1000;   // refresh every second
     }
     if (millis() > _auto_off) {
