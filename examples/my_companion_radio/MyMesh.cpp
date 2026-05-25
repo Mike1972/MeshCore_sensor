@@ -868,6 +868,8 @@ MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMe
   _prefs.tx_power_dbm = LORA_TX_POWER;
   _prefs.gps_enabled = 0;       // GPS disabled by default
   _prefs.gps_interval = 0;      // No automatic GPS updates by default
+  _prefs.low_battery_shutdown_mv = 3400;  // Default low battery shutdown threshold
+  _prefs.deep_sleep_wake_secs = 30 * 60;  // Default 30 minutes
   //_prefs.rx_delay_base = 10.0f;  enable once new algo fixed
 #if defined(USE_SX1262) || defined(USE_SX1268)
 #ifdef SX126X_RX_BOOSTED_GAIN
@@ -925,6 +927,8 @@ void MyMesh::begin(bool has_display) {
   _prefs.tx_power_dbm = constrain(_prefs.tx_power_dbm, -9, MAX_LORA_TX_POWER);
   _prefs.gps_enabled = constrain(_prefs.gps_enabled, 0, 1);  // Ensure boolean 0 or 1
   _prefs.gps_interval = constrain(_prefs.gps_interval, 0, 86400);  // Max 24 hours
+  _prefs.low_battery_shutdown_mv = (_prefs.low_battery_shutdown_mv > 0) ? constrain(_prefs.low_battery_shutdown_mv, 2500, 4200) : 3400;  // 2.5V to 4.2V
+  _prefs.deep_sleep_wake_secs = (_prefs.deep_sleep_wake_secs > 0) ? constrain(_prefs.deep_sleep_wake_secs, 60, 86400) : (30 * 60);  // 1 min to 24 hours
 
 #ifdef BLE_PIN_CODE // 123456 by default
   if (_prefs.ble_pin == 0) {
@@ -1981,6 +1985,14 @@ void MyMesh::checkCLIRescueCmd() {
         _prefs.ble_pin = atoi(&config[4]);
         savePrefs();
         Serial.printf("  > pin is now %06d\n", _prefs.ble_pin);
+      } else if (memcmp(config, "low_batt_mv ", 12) == 0) {
+        _prefs.low_battery_shutdown_mv = atoi(&config[12]);
+        savePrefs();
+        Serial.printf("  > low_battery_shutdown_mv is now %u mV\n", _prefs.low_battery_shutdown_mv);
+      } else if (memcmp(config, "deep_sleep_secs ", 15) == 0) {
+        _prefs.deep_sleep_wake_secs = atoi(&config[15]);
+        savePrefs();
+        Serial.printf("  > deep_sleep_wake_secs is now %u seconds\n", _prefs.deep_sleep_wake_secs);
       } else {
         Serial.printf("  Error: unknown config: %s\n", config);
       }

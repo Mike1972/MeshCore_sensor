@@ -97,5 +97,5 @@ public:
   void notify(UIEventType t = UIEventType::none) override;
   void loop() override;
 
-  void shutdown(bool restart = false);
+  void shutdown(bool restart = false, uint32_t wake_secs = 0);
 };

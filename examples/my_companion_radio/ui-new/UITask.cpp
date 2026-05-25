@@ -685,16 +685,22 @@ void UITask::shutdown(bool restart, uint32_t wake_secs){
 
   #endif // PIN_BUZZER
 
-  if (restart) {
+    if (restart) {
     _board->reboot();
   } else {
     _display->turnOff();
     radio_driver.powerOff();
-    if (wake_secs > 0) {
-      _board->enterDeepSleep(wake_secs);
+#if defined(HELTEC_LORA_V4)
+    #include "HeltecV4Board.h"
+    HeltecV4Board* heltec = static_cast<HeltecV4Board*>(_board);
+    if (wake_secs > 0 && heltec != nullptr) {
+      heltec->enterDeepSleep(wake_secs);
     } else {
       _board->powerOff();
     }
+#else
+    _board->powerOff();
+#endif
   }
 }
 
@@ -817,7 +823,8 @@ void UITask::loop() {
 #ifdef AUTO_SHUTDOWN_MILLIVOLTS
   if (millis() > next_batt_chck) {
     uint16_t milliVolts = getBattMilliVolts();
-    if (milliVolts > 0 && milliVolts < AUTO_SHUTDOWN_MILLIVOLTS) {
+    uint16_t shutdown_threshold = (_node_prefs && _node_prefs->low_battery_shutdown_mv > 0) ? _node_prefs->low_battery_shutdown_mv : AUTO_SHUTDOWN_MILLIVOLTS;
+    if (milliVolts > 0 && milliVolts < shutdown_threshold) {
 
       // show low battery shutdown alert
       // we should only do this for eink displays, which will persist after power loss
@@ -833,7 +840,8 @@ void UITask::loop() {
       #endif
 
       // enter timed deep sleep to periodically wake and check battery
-      shutdown(false, 30 * 60); // wake every 30 minutes
+      uint32_t wake_secs = (_node_prefs && _node_prefs->deep_sleep_wake_secs > 0) ? _node_prefs->deep_sleep_wake_secs : (30 * 60);
+      shutdown(false, wake_secs);
 
     }
     next_batt_chck = millis() + 8000;
