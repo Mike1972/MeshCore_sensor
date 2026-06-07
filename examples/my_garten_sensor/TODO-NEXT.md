@@ -1,3 +1,14 @@
+# Zusammenfassung der Änderungen
+
+- Basierend auf `examples/simple_sensor`, aber erweitert um einen Garten-Sensor mit Luftfeuchte-, Lufttemperatur-, Bodentemperatur- und Bodenfeuchtigkeitsmessung.
+- Enthält zusätzliche Sensor-Integrationen: `SHT31` für Luftdaten, `DS18B20` für Bodentemperatur und eine analoge Bodenfeuchtemessung mit gesteuerter Spannungsversorgung.
+- Nutzt ein privates Garden-GroupChannel-Paket (`GARTEN_CHANNEL_KEY_HEX`) anstelle der einfachen Sensor-Sendungen.
+- Fügt eine Display-Startup-Anzeige ein, die nach 3 Sekunden automatisch abschaltet.
+- Implementiert echten Sleep nach Senden: LoRa-TX flushen, Display abschalten, `radio_driver.powerOff()` und FreeRTOS Tickless-Idle `delay()` statt nur WFE.
+- Bietet einen lange gedrückten USR-Button, um den Sleep-Modus zu toggeln, damit das Gerät bei Bedarf dauerhaft wach bleiben kann.
+- `pending_sleep` markiert den Übergang in den Sleep-Zyklus nach dem nächsten Senden.
+
+# TO DOs
 Das überschreibt den Default von 60 s in SensorMesh.cpp:43-44. Sensor-Read wird also nur noch alle 10 min ausgelöst.
 
 examples/garten_sensor/main.cpp:382-419 — neue Sleep-Sequenz:
