@@ -31,6 +31,8 @@ static uint32_t _atoi(const char* sp) {
   DataStore store(LittleFS, rtc_clock);
 #elif defined(ESP32)
   #include <SPIFFS.h>
+  #include <esp_system.h>
+  #include <esp_sleep.h>
   DataStore store(SPIFFS, rtc_clock);
 #endif
 
@@ -149,6 +151,27 @@ void setup() {
         false
     #endif
   );
+
+#if defined(ESP32)
+  esp_reset_reason_t _rs = esp_reset_reason();
+  if (_rs == ESP_RST_DEEPSLEEP) {
+    long wakeup_source = esp_sleep_get_ext1_wakeup_status();
+    if (wakeup_source == 0) { // timer wake (no ext1 source)
+      mesh::GroupChannel channel;
+      memset(channel.secret, 0, sizeof(channel.secret));
+      mesh::Utils::fromHex(channel.secret, 16, "331fed274722496373b4cf17e2c792d8");
+      mesh::Utils::sha256(channel.hash, sizeof(channel.hash), channel.secret, 16);
+
+      char msg[80];
+      uint16_t batt = board.getBattMilliVolts();
+      const char* name = the_mesh.getNodePrefs()->node_name;
+      int len = snprintf(msg, sizeof(msg), "%s %dmV", name, batt);
+      if (len > 0) {
+        the_mesh.sendGroupMessage(rtc_clock.getCurrentTime(), channel, name, msg, len);
+      }
+    }
+  }
+#endif
 
 #ifdef BLE_PIN_CODE
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
