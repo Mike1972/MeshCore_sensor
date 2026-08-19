@@ -235,6 +235,7 @@ void DataStore::loadPrefsInt(const char *filename, NodePrefs& _prefs, double& no
     file.read((uint8_t *)_prefs.default_scope_key, sizeof(_prefs.default_scope_key));     // 121
     file.read((uint8_t *)&_prefs.low_battery_shutdown_mv, sizeof(_prefs.low_battery_shutdown_mv));  // 137
     file.read((uint8_t *)&_prefs.deep_sleep_wake_secs, sizeof(_prefs.deep_sleep_wake_secs));        // 139
+    file.read((uint8_t *)&_prefs.status_send_count, sizeof(_prefs.status_send_count));              // 143
 
     file.close();
   }
@@ -277,6 +278,7 @@ void DataStore::savePrefs(const NodePrefs& _prefs, double node_lat, double node_
     file.write((uint8_t *)_prefs.default_scope_key, sizeof(_prefs.default_scope_key));     // 121
     file.write((uint8_t *)&_prefs.low_battery_shutdown_mv, sizeof(_prefs.low_battery_shutdown_mv));  // 137
     file.write((uint8_t *)&_prefs.deep_sleep_wake_secs, sizeof(_prefs.deep_sleep_wake_secs));        // 139
+    file.write((uint8_t *)&_prefs.status_send_count, sizeof(_prefs.status_send_count));              // 143
 
     file.close();
   }

@@ -50,7 +50,9 @@ void HeltecV4Board::begin() {
     }
 
     if (secs > 0) {
-      esp_sleep_enable_timer_wakeup(secs * 1000000);
+      // cast before the multiply: 32-bit arithmetic wraps above 4294 secs, which
+      // silently turns a long sleep into a very short one (e.g. 24h -> 8m20s)
+      esp_sleep_enable_timer_wakeup((uint64_t)secs * 1000000ULL);
     }
 
     // Finally set ESP32 into sleep

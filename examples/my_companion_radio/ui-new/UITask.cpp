@@ -825,6 +825,7 @@ void UITask::loop() {
     uint16_t milliVolts = getBattMilliVolts();
     uint16_t shutdown_threshold = (_node_prefs && _node_prefs->low_battery_shutdown_mv > 0) ? _node_prefs->low_battery_shutdown_mv : AUTO_SHUTDOWN_MILLIVOLTS;
     if (milliVolts > 0 && milliVolts < shutdown_threshold) {
+      Serial.printf("[LowBatt] %u mV < %u mV threshold -> deep sleep\n", milliVolts, shutdown_threshold);
 
       // show low battery shutdown alert
       // we should only do this for eink displays, which will persist after power loss

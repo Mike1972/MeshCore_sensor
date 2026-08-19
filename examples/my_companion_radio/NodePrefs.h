@@ -36,4 +36,5 @@ struct NodePrefs {  // persisted to file
   uint8_t default_scope_key[16];
   uint16_t low_battery_shutdown_mv;  // Low battery auto-shutdown threshold in mV (default 3400)
   uint32_t deep_sleep_wake_secs;     // Deep sleep wake interval in seconds when low batt (default 1800 = 30 min)
+  uint32_t status_send_count;        // Increasing counter of status messages sent to the private channel
 };

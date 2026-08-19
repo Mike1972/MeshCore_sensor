@@ -917,6 +917,13 @@ void MyMesh::begin(bool has_display) {
   // load persisted prefs
   _store->loadPrefs(_prefs, sensors.node_lat, sensors.node_lon);
 
+#ifdef FORCE_ADVERT_NAME
+  // unlike ADVERT_NAME (a default that the persisted name overrides on load),
+  // this wins over whatever is stored -- so re-flashing actually renames the node
+  strncpy(_prefs.node_name, FORCE_ADVERT_NAME, sizeof(_prefs.node_name) - 1);
+  _prefs.node_name[sizeof(_prefs.node_name) - 1] = 0;
+#endif
+
   // sanitise bad pref values
   _prefs.rx_delay_base = constrain(_prefs.rx_delay_base, 0, 20.0f);
   _prefs.airtime_factor = constrain(_prefs.airtime_factor, 0, 9.0f);
